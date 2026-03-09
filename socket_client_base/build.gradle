@@ -1,0 +1,42 @@
+plugins {
+    id 'java-library'
+}
+
+group   = 'com.huydt'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JSON parsing
+    implementation 'org.json:json:20231013'
+    // WebSocket client (cùng lib với server)
+    implementation 'org.java-websocket:Java-WebSocket:1.5.4'
+    implementation 'org.slf4j:slf4j-simple:2.0.12'
+}
+
+// ── Fat JAR — self-contained ───────────────────────────────────────────────
+jar {
+    archiveBaseName    = 'socket_client_base'
+    archiveVersion     = version
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    manifest {
+        attributes(
+            'Main-Class'             : 'com.huydt.socket_client_base.Main',
+            'Implementation-Title'   : 'socket_client_base',
+            'Implementation-Version' :  version
+        )
+    }
+}
