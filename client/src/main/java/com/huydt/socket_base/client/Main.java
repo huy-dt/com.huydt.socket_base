@@ -15,49 +15,56 @@ import java.util.Scanner;
  * <pre>
  * java -jar socket_client_base.jar [options]
  *
- * Options:
- *   --host  &lt;h&gt;       Server host       (default: localhost)
- *   --port  &lt;n&gt;       WebSocket port    (default: 9001)
- *   --name  &lt;name&gt;    Player name       (default: Player)
- *   --room  &lt;roomId&gt;  Auto-join room on connect
- *   --token &lt;token&gt;   Reconnect token from a previous session
- *   --admin &lt;token&gt;   Admin token — auto-sends ADMIN_AUTH on connect
- *   --ssl             Use WSS
+ * Transport (default: WebSocket):
+ *   --url   &lt;url&gt;      Full URL — scheme sets transport automatically
+ *                         ws://host[:port][/path]
+ *                         wss://host[:port][/path]
+ *                         tcp://host:port
+ *                         tcp+ssl://host:port
+ *                         udp://host:port
+ *                         udp+ssl://host:port
+ *   --tcp               Use raw TCP (requires --host and --port)
+ *   --udp               Use raw UDP (requires --host and --port)
+ *   --ssl               Enable SSL/TLS (works with ws/tcp/udp)
+ *
+ * Connection:
+ *   --host  &lt;h&gt;        Server host     (default: localhost)
+ *   --port  &lt;n&gt;        Port            (default: scheme-specific)
+ *   --name  &lt;n&gt;        Player name     (default: Player)
+ *   --room  &lt;roomId&gt;   Auto-join room on connect
+ *   --token &lt;token&gt;    Reconnect token from a previous session
+ *   --admin &lt;token&gt;    Admin token (auto-sends ADMIN_AUTH)
  *   --help
+ * </pre>
+ *
+ * <h3>Examples</h3>
+ * <pre>
+ * # WebSocket — URL without port
+ * java -jar client.jar --url wss://game.example.com/ws --name Alice
+ *
+ * # WebSocket — explicit host + port + SSL
+ * java -jar client.jar --host game.example.com --port 443 --ssl --name Alice
+ *
+ * # TCP
+ * java -jar client.jar --tcp --host game.example.com --port 9002 --name Alice
+ *
+ * # TCP + SSL
+ * java -jar client.jar --tcp --ssl --host game.example.com --port 9002 --name Alice
+ *
+ * # UDP
+ * java -jar client.jar --udp --host game.example.com --port 9003 --name Alice
  * </pre>
  *
  * <h3>Console commands</h3>
  * <pre>
- *   ── Player ──────────────────────────────────────────────
- *   info                              Session &amp; connection info
- *   players                           List players (lobby or room)
- *   room-join  &lt;roomId&gt; [password]    Join a room
- *   room-leave                        Leave current room
- *   custom     &lt;tag&gt; [message]        Send custom event
- *
- *   ── Admin ───────────────────────────────────────────────
- *   admin-auth &lt;token&gt;
- *   rooms                             List all rooms
- *   room-add   &lt;name&gt; [max]           Create a room
- *   room-remove &lt;roomId&gt;              Close a room
- *   room-state  &lt;roomId&gt; &lt;state&gt;
- *   kick       &lt;playerId&gt; [reason]
- *   disconnect &lt;playerId&gt;
- *   bans                              Show ban lists
- *   ban        &lt;playerId&gt; [reason]
- *   unban      &lt;displayName&gt;
- *   ban-ip     &lt;ip&gt;
- *   unban-ip   &lt;ip&gt;
- *   broadcast  [roomId|-] &lt;tag&gt; [msg]
- *   send       &lt;playerId&gt; &lt;tag&gt; [msg]
- *   stats
- *
- *   quit
+ *   info / players / room-join / room-leave / custom
+ *   admin-auth / rooms / room-add / room-remove / room-state
+ *   kick / disconnect / bans / ban / unban / ban-ip / unban-ip
+ *   broadcast / send / stats / quit
  * </pre>
  */
 public class Main {
 
-    /** Last received APP_SNAPSHOT — used to display lobby player list. */
     private static volatile JSONObject lastAppSnapshot = null;
 
     public static void main(String[] args) throws Exception {
@@ -66,18 +73,47 @@ public class Main {
             return;
         }
 
-        String  host        = strArg(args, "--host",  "localhost");
-        int     port        = intArg(args, "--port",  9001);
+        // ── Build config ──────────────────────────────────────────────
+        ClientConfig.Builder cfgBuilder = new ClientConfig.Builder();
+
+        String url = strArg(args, "--url", null);
+        if (url != null) {
+            // --url overrides everything
+            cfgBuilder.url(url);
+        } else {
+            // Transport flags
+            boolean isTcp = hasFlag(args, "--tcp");
+            boolean isUdp = hasFlag(args, "--udp");
+            boolean ssl   = hasFlag(args, "--ssl");
+
+            if (isTcp && isUdp)
+                die("Cannot use --tcp and --udp together.");
+
+            if (isTcp) {
+                cfgBuilder.protocol(ssl ? ClientConfig.Protocol.TCP_SSL : ClientConfig.Protocol.TCP);
+            } else if (isUdp) {
+                cfgBuilder.protocol(ssl ? ClientConfig.Protocol.UDP_SSL : ClientConfig.Protocol.UDP);
+            } else {
+                cfgBuilder.protocol(ssl ? ClientConfig.Protocol.WSS : ClientConfig.Protocol.WS);
+            }
+
+            String host = strArg(args, "--host", "localhost");
+            cfgBuilder.host(host);
+
+            String portStr = strArg(args, "--port", null);
+            if (portStr != null) cfgBuilder.port(Integer.parseInt(portStr));
+            // else port stays -1 → effectivePort() returns scheme default
+        }
+
+        ClientConfig config = cfgBuilder.build();
+
+        // ── Other CLI args ─────────────────────────────────────────────
         String  name        = strArg(args, "--name",  "Player");
         String  room        = strArg(args, "--room",  null);
         String  adminToken  = strArg(args, "--admin", null);
         String  reconnToken = strArg(args, "--token", null);
-        boolean ssl         = hasFlag(args, "--ssl");
 
-        ClientConfig config = new ClientConfig.Builder()
-                .host(host).port(port).useSsl(ssl)
-                .build();
-
+        // ── Build client ──────────────────────────────────────────────
         SocketBaseClient client = new SocketBaseClient.Builder()
                 .config(config)
                 .name(name)
@@ -88,8 +124,10 @@ public class Main {
 
         // ── Event listeners ───────────────────────────────────────────
         client
-            .on(ClientEventType.CONNECTED, e ->
-                System.out.println("[Event] Connected → " + config.wsUri()))
+            .on(ClientEventType.CONNECTED, e -> {
+                String addr = config.protocol.isWebSocket() ? config.wsUri() : config.tcpAddress();
+                System.out.println("[Event] Connected [" + config.protocol + "] → " + addr);
+            })
 
             .on(ClientEventType.DISCONNECTED, e ->
                 System.out.println("[Event] Disconnected: " + e.getMessage()))
@@ -178,14 +216,9 @@ public class Main {
                             r.optString("name"), r.optString("state"), r.optInt("playerCount"));
             })
 
-            .on(ClientEventType.KICKED, e ->
-                System.out.println("[Event] KICKED: " + e.getPayload().optString("reason")))
-
-            .on(ClientEventType.BANNED, e ->
-                System.out.println("[Event] BANNED: " + e.getPayload().optString("reason")))
-
-            .on(ClientEventType.ADMIN_AUTH_OK, e ->
-                System.out.println("[Event] ADMIN_AUTH_OK — admin access granted"))
+            .on(ClientEventType.KICKED,  e -> System.out.println("[Event] KICKED: "  + e.getPayload().optString("reason")))
+            .on(ClientEventType.BANNED,  e -> System.out.println("[Event] BANNED: "  + e.getPayload().optString("reason")))
+            .on(ClientEventType.ADMIN_AUTH_OK, e -> System.out.println("[Event] ADMIN_AUTH_OK — admin access granted"))
 
             .on(ClientEventType.BAN_LIST, e -> {
                 System.out.println("[Event] BAN_LIST:");
@@ -205,14 +238,14 @@ public class Main {
                         p.optString("tag"), p.optJSONObject("data"));
             })
 
-            .on(ClientEventType.ERROR, e ->
-                System.err.println("[Event] ERROR: " + e.getMessage()))
+            .on(ClientEventType.ERROR, e -> System.err.println("[Event] ERROR: " + e.getMessage()))
 
             .onError((ev, ex) ->
                 System.err.println("[EventBus] threw on " + ev.getType() + ": " + ex.getMessage()));
 
         // ── Connect ───────────────────────────────────────────────────
-        System.out.println("[Main] Connecting to " + config.wsUri() + " as '" + name + "'…");
+        String displayAddr = config.protocol.isWebSocket() ? config.wsUri() : config.tcpAddress();
+        System.out.println("[Main] Connecting [" + config.protocol + "] → " + displayAddr + " as '" + name + "'…");
         client.connect();
 
         // ── Interactive console ───────────────────────────────────────
@@ -235,34 +268,29 @@ public class Main {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  CONSOLE COMMANDS
+    //  CONSOLE COMMANDS  (unchanged from original)
     // ═══════════════════════════════════════════════════════════════════
 
     private static void handleCommand(String cmd, String[] parts, SocketBaseClient client) {
         switch (cmd) {
 
-            // ── General ───────────────────────────────────────────────
-            case "help":
-                printConsoleHelp();
-                break;
+            case "help": printConsoleHelp(); break;
 
             case "info":
                 System.out.println("  Session  : " + client.getSession());
                 System.out.println("  Config   : " + client.getConfig());
+                System.out.println("  Protocol : " + client.getConfig().protocol);
                 System.out.println("  Connected: " + client.isConnected());
                 break;
 
-            // ── Player ────────────────────────────────────────────────
             case "players": {
                 com.huydt.socket_base.client.model.RoomInfo room = client.getSession().getCurrentRoom();
                 if (room != null) {
-                    System.out.printf("  [room: %s]  %-24s %-16s %-10s%n",
-                            room.name, "ID", "NAME", "STATUS");
+                    System.out.printf("  [room: %s]  %-24s %-16s %-10s%n", room.name, "ID", "NAME", "STATUS");
                     System.out.println("  " + "-".repeat(56));
-                    for (com.huydt.socket_base.client.model.PlayerInfo p : room.getPlayers().values()) {
+                    for (com.huydt.socket_base.client.model.PlayerInfo p : room.getPlayers().values())
                         System.out.printf("             %-24s %-16s %-10s%n",
                                 p.id, p.name, p.connected ? "online" : "ghost");
-                    }
                 } else if (lastAppSnapshot != null) {
                     printPlayerTable(lastAppSnapshot.optJSONArray("players"), "lobby");
                 } else {
@@ -277,29 +305,22 @@ public class Main {
                 break;
             }
 
-            case "room-leave":
-                client.leaveRoom();
-                break;
+            case "room-leave": client.leaveRoom(); break;
 
             case "custom": {
                 if (parts.length < 2) { System.out.println("  Usage: custom <tag> [message]"); break; }
-                JSONObject data = parts.length >= 3
-                        ? new JSONObject().put("message", parts[2]) : null;
+                JSONObject data = parts.length >= 3 ? new JSONObject().put("message", parts[2]) : null;
                 client.custom(parts[1], data);
                 break;
             }
 
-            // ── Admin auth ────────────────────────────────────────────
             case "admin-auth": {
                 if (parts.length < 2) { System.out.println("  Usage: admin-auth <token>"); break; }
                 client.adminAuth(parts[1]);
                 break;
             }
 
-            // ── Admin: rooms ──────────────────────────────────────────
-            case "rooms":
-                client.listRooms();
-                break;
+            case "rooms": client.listRooms(); break;
 
             case "room-add": {
                 if (parts.length < 2) { System.out.println("  Usage: room-add <name> [maxPlayers]"); break; }
@@ -320,7 +341,6 @@ public class Main {
                 break;
             }
 
-            // ── Admin: players ────────────────────────────────────────
             case "kick": {
                 if (parts.length < 2) { System.out.println("  Usage: kick <playerId> [reason]"); break; }
                 client.kick(parts[1], parts.length >= 3 ? parts[2] : "Kicked by admin");
@@ -333,10 +353,7 @@ public class Main {
                 break;
             }
 
-            // ── Admin: bans ───────────────────────────────────────────
-            case "bans":
-                client.getBanList();
-                break;
+            case "bans": client.getBanList(); break;
 
             case "ban": {
                 if (parts.length < 2) { System.out.println("  Usage: ban <playerId> [reason]"); break; }
@@ -362,42 +379,35 @@ public class Main {
                 break;
             }
 
-            // ── Admin: messaging ──────────────────────────────────────
             case "broadcast": {
                 if (parts.length < 2) { System.out.println("  Usage: broadcast [roomId|-] <tag> [msg]"); break; }
                 String roomId, tag, msgStr = null;
                 if (parts.length == 2) {
                     roomId = null; tag = parts[1];
                 } else {
-                    // Treat first arg as roomId only if it looks like an id token or "-"
                     boolean isRoom = parts[1].equals("-") || parts[1].matches("[a-zA-Z0-9_\\-]+");
                     if (isRoom && parts.length >= 3) {
                         roomId = parts[1].equals("-") ? null : parts[1];
-                        tag    = parts[2];
+                        tag = parts[2];
                         msgStr = parts.length >= 4 ? parts[3] : null;
                     } else {
                         roomId = null; tag = parts[1];
                         msgStr = parts.length >= 3 ? parts[2] : null;
                     }
                 }
-                client.adminBroadcast(roomId, tag,
-                        msgStr != null ? new JSONObject().put("message", msgStr) : null);
+                client.adminBroadcast(roomId, tag, msgStr != null ? new JSONObject().put("message", msgStr) : null);
                 break;
             }
 
             case "send": {
                 if (parts.length < 3) { System.out.println("  Usage: send <playerId> <tag> [msg]"); break; }
-                JSONObject data = parts.length >= 4
-                        ? new JSONObject().put("message", parts[3]) : null;
+                JSONObject data = parts.length >= 4 ? new JSONObject().put("message", parts[3]) : null;
                 client.adminSend(parts[1], parts[2], data);
                 break;
             }
 
-            case "stats":
-                client.getStats();
-                break;
+            case "stats": client.getStats(); break;
 
-            // ── Misc ──────────────────────────────────────────────────
             case "quit":
             case "exit":
                 client.disconnect();
@@ -418,8 +428,7 @@ public class Main {
             System.out.println("  (no players in " + source + " snapshot)");
             return;
         }
-        System.out.printf("  [%s]  %-24s %-14s %-20s %-10s%n",
-                source, "ID", "NAME", "ROOM", "STATUS");
+        System.out.printf("  [%s]  %-24s %-14s %-20s %-10s%n", source, "ID", "NAME", "ROOM", "STATUS");
         System.out.println("  " + "-".repeat(74));
         for (int i = 0; i < players.length(); i++) {
             JSONObject p = players.getJSONObject(i);
@@ -448,22 +457,18 @@ public class Main {
         System.out.println();
         System.out.println("  ── Admin ───────────────────────────────────────────────────────────");
         System.out.println("  admin-auth  <token>                Authenticate as admin");
-        System.out.println();
         System.out.println("  rooms                              List all rooms");
         System.out.println("  room-add    <name> [max]           Create a room");
         System.out.println("  room-remove <roomId>               Close a room");
         System.out.println("  room-state  <roomId> <state>       Set room state");
         System.out.println("              States: WAITING STARTING PLAYING PAUSED ENDED");
-        System.out.println();
         System.out.println("  kick        <playerId> [reason]    Kick a player");
         System.out.println("  disconnect  <playerId>             Disconnect a player");
-        System.out.println();
         System.out.println("  bans                               Show all ban lists");
         System.out.println("  ban         <playerId> [reason]    Ban a player");
         System.out.println("  unban       <displayName>          Unban by display name");
         System.out.println("  ban-ip      <ip>                   Ban an IP address");
         System.out.println("  unban-ip    <ip>                   Unban an IP address");
-        System.out.println();
         System.out.println("  broadcast   [roomId|-] <tag> [msg] Broadcast event (- = all)");
         System.out.println("  send        <playerId> <tag> [msg] Send to player");
         System.out.println("  stats                              Server statistics");
@@ -478,29 +483,40 @@ public class Main {
             "\n" +
             "Usage: java -jar socket_client_base.jar [options]\n" +
             "\n" +
-            "  --host  <h>       Server host       (default: localhost)\n" +
-            "  --port  <n>       WebSocket port    (default: 9001)\n" +
-            "  --name  <name>    Player name       (default: Player)\n" +
-            "  --room  <roomId>  Auto-join room on connect\n" +
-            "  --token <token>   Reconnect token from a previous session\n" +
-            "  --admin <token>   Admin token (auto-sends ADMIN_AUTH)\n" +
-            "  --ssl             Use WSS\n" +
-            "  --help\n"
+            "  Transport (default: WebSocket ws://):\n" +
+            "    --url   <url>       Full URL — sets transport from scheme\n" +
+            "                          ws://host[:port][/path]\n" +
+            "                          wss://host[:port][/path]   (port optional: default 443)\n" +
+            "                          tcp://host:port\n" +
+            "                          tcp+ssl://host:port\n" +
+            "                          udp://host:port\n" +
+            "                          udp+ssl://host:port\n" +
+            "    --tcp               Use raw TCP transport\n" +
+            "    --udp               Use raw UDP transport\n" +
+            "    --ssl               Enable SSL/TLS (ws→wss, tcp→tcp+ssl, udp→udp+ssl)\n" +
+            "\n" +
+            "  Connection:\n" +
+            "    --host  <h>         Server host    (default: localhost)\n" +
+            "    --port  <n>         Port           (default: scheme-specific)\n" +
+            "    --name  <n>         Player name    (default: Player)\n" +
+            "    --room  <roomId>    Auto-join room on connect\n" +
+            "    --token <token>     Reconnect token from a previous session\n" +
+            "    --admin <token>     Admin token (auto-sends ADMIN_AUTH)\n" +
+            "    --help\n" +
+            "\n" +
+            "  Examples:\n" +
+            "    java -jar client.jar --url wss://game.example.com/ws --name Alice\n" +
+            "    java -jar client.jar --host localhost --port 9001 --name Alice\n" +
+            "    java -jar client.jar --tcp --host localhost --port 9002 --name Alice\n" +
+            "    java -jar client.jar --tcp --ssl --host game.example.com --port 9002\n" +
+            "    java -jar client.jar --udp --host localhost --port 9003 --name Alice\n"
         );
     }
-
-    // ── CLI helpers ───────────────────────────────────────────────────
 
     private static String strArg(String[] args, String flag, String def) {
         for (int i = 0; i < args.length - 1; i++)
             if (args[i].equalsIgnoreCase(flag)) return args[i + 1];
         return def;
-    }
-
-    private static int intArg(String[] args, String flag, int def) {
-        String s = strArg(args, flag, null);
-        if (s == null) return def;
-        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return def; }
     }
 
     private static boolean hasFlag(String[] args, String flag) {
@@ -510,5 +526,10 @@ public class Main {
 
     private static int safeInt(String s, int def) {
         try { return Integer.parseInt(s); } catch (NumberFormatException e) { return def; }
+    }
+
+    private static void die(String msg) {
+        System.err.println("[Error] " + msg);
+        System.exit(1);
     }
 }

@@ -21,19 +21,95 @@ client.connect();
 
 ---
 
+## Transports
+
+The client supports four transports. Default is plain WebSocket (`ws://`).
+
+| Flag / Protocol | Description |
+|-----------------|-------------|
+| *(default)*     | WebSocket — `ws://host:port` |
+| `--ssl`         | Secure WebSocket — `wss://host:port` |
+| `--tcp`         | Raw TCP — newline-delimited JSON |
+| `--tcp --ssl`   | TCP + TLS |
+| `--udp`         | Raw UDP — JSON datagrams |
+| `--udp --ssl`   | UDP + DTLS |
+| `--url <url>`   | Full URL — scheme sets transport automatically |
+
+### CLI examples
+
+```bash
+# WebSocket — port inferred from scheme (443)
+java -jar client.jar --url wss://game.example.com/ws --name Alice
+
+# WebSocket — explicit host + port
+java -jar client.jar --host localhost --port 9001 --name Alice
+
+# WebSocket + SSL
+java -jar client.jar --host game.example.com --port 443 --ssl --name Alice
+
+# TCP
+java -jar client.jar --tcp --host localhost --port 9002 --name Alice
+
+# TCP + SSL
+java -jar client.jar --tcp --ssl --host game.example.com --port 9002 --name Alice
+
+# UDP
+java -jar client.jar --udp --host localhost --port 9003 --name Alice
+```
+
+### Supported URL schemes
+
+```
+ws://host[:port][/path]          WebSocket plain      (default port 80)
+wss://host[:port][/path]         WebSocket secure     (default port 443)
+tcp://host:port                  TCP plain
+tcp+ssl://host:port              TCP + TLS
+udp://host:port                  UDP plain
+udp+ssl://host:port              UDP + DTLS
+```
+
+Port is **optional** for `ws://` and `wss://` — omitting it uses the scheme default.
+
+---
+
 ## ClientConfig
 
 ```java
 new ClientConfig.Builder()
-    .host("localhost")          // default localhost
-    .port(9001)                 // default 9001
-    .useSsl(false)              // WSS (default false)
-    .connectTimeoutMs(5_000)    // initial connect timeout (default 5 000)
-    .reconnectTimeoutMs(0)      // mirrors server ghost window; 0 = no hint (default 0)
+    .host("localhost")                          // default: localhost
+    .port(9001)                                 // default: scheme-specific (-1 = auto)
+    .protocol(ClientConfig.Protocol.WS)         // WS | WSS | TCP | TCP_SSL | UDP | UDP_SSL
+    .useSsl(false)                              // shorthand: WS→WSS, TCP→TCP_SSL, UDP→UDP_SSL
+    .connectTimeoutMs(5_000)                    // initial connect timeout (default: 5 000)
+    .reconnectTimeoutMs(0)                      // mirrors server ghost window; 0 = no hint
     .build()
 ```
 
-URI is built automatically: `ws://host:port` or `wss://host:port`.
+### Protocol enum
+
+```java
+ClientConfig.Protocol.WS        // ws://   (default)
+ClientConfig.Protocol.WSS       // wss://
+ClientConfig.Protocol.TCP       // raw TCP
+ClientConfig.Protocol.TCP_SSL   // TCP + TLS
+ClientConfig.Protocol.UDP       // raw UDP datagram
+ClientConfig.Protocol.UDP_SSL   // UDP + DTLS
+```
+
+### Full URL builder
+
+```java
+// wss — port omitted, effective port = 443
+ClientConfig config = new ClientConfig.Builder()
+    .url("wss://game.example.com/ws")
+    .connectTimeoutMs(8_000)
+    .build();
+
+// TCP + SSL
+ClientConfig config = new ClientConfig.Builder()
+    .url("tcp+ssl://game.example.com:9002")
+    .build();
+```
 
 ---
 
@@ -43,11 +119,13 @@ URI is built automatically: `ws://host:port` or `wss://host:port`.
 new SocketBaseClient.Builder()
     .host("game.example.com")
     .port(9001)
-    .useSsl(true)
-    .name("Alice")                           // display name sent with JOIN
-    .roomId("room-abc")                      // auto-join this room after WELCOME
-    .reconnectToken(savedToken)              // restore previous session
-    .adminToken("server-secret")             // auto-sends ADMIN_AUTH before JOIN
+    .protocol(ClientConfig.Protocol.TCP_SSL)    // set transport directly
+    .useSsl(true)                               // or toggle SSL on current protocol
+    .url("wss://game.example.com/ws")           // or full URL (overrides host/port/protocol)
+    .name("Alice")                              // display name sent with JOIN
+    .roomId("room-abc")                         // auto-join this room after WELCOME
+    .reconnectToken(savedToken)                 // restore previous session
+    .adminToken("server-secret")                // auto-sends ADMIN_AUTH before JOIN
     .build();
 ```
 
@@ -56,8 +134,7 @@ new SocketBaseClient.Builder()
 ## Models
 
 The client mirrors the server model hierarchy. Override `RoomInfo` and `PlayerInfo`
-to add game-specific fields, then tell the session to use your subclasses via
-`setRoomFactory`.
+to add game-specific fields, then wire them into the session via `setRoomFactory`.
 
 ### `PlayerInfo` — extending
 
@@ -88,8 +165,6 @@ public class LotoPlayerInfo extends PlayerInfo {
     }
 }
 ```
-
----
 
 ### `RoomInfo` — extending
 
@@ -139,7 +214,7 @@ public class LotoRoomInfo extends RoomInfo {
 
 ## Wiring custom models into the session
 
-Set the factory **before** `connect()` so the very first WELCOME/ROOM_SNAPSHOT
+Set the factory **before** `connect()` so the very first WELCOME / ROOM_SNAPSHOT
 already uses your subclass.
 
 ```java
@@ -179,11 +254,6 @@ public class LotoClient extends SocketBaseClient {
 
     public LotoClient(Builder b) { super(b); }
 
-    /**
-     * Called for every CUSTOM_MSG received from the server.
-     * Default: emits ClientEventType.CUSTOM_MSG to the event bus.
-     * Override to route by tag for cleaner game logic.
-     */
     @Override
     protected void dispatchCustom(InboundMsg msg, JSONObject payload) {
         String tag = payload.optString("tag");
@@ -194,7 +264,7 @@ public class LotoClient extends SocketBaseClient {
             case "NUMBER_DRAWN": onNumberDrawn(data); break;
             case "GAME_OVER":    onGameOver(data);    break;
             default:
-                super.dispatchCustom(msg, payload);  // falls through to CUSTOM_MSG event
+                super.dispatchCustom(msg, payload);   // falls through to CUSTOM_MSG event
         }
     }
 
@@ -204,12 +274,13 @@ public class LotoClient extends SocketBaseClient {
 }
 ```
 
-Build with the subclass — the `Builder` constructor is `protected`:
+Build with the subclass — works with any transport:
 
 ```java
 LotoClient client = new LotoClient(
     new SocketBaseClient.Builder()
-        .host("localhost").port(9001).name("Alice")
+        .url("tcp+ssl://game.example.com:9002")   // TCP + SSL
+        .name("Alice")
 );
 client.getSession().setRoomFactory(LotoRoomInfo::new);
 client.connect();
@@ -265,13 +336,15 @@ s.getCurrentRoom()     // RoomInfo (or LotoRoomInfo), null if in lobby
 s.getPlayer("id")      // PlayerInfo from current room
 ```
 
-`ClientSession` is **not thread-safe** — read it only from the WS callback thread
-(inside event listeners). If you need to read from the UI thread, take a copy of
-the fields you need inside the listener.
+> ⚠️ `ClientSession` is **not thread-safe** — read it only from the transport
+> callback thread (inside event listeners). If you need to read from the UI
+> thread, copy the fields you need inside the listener.
 
 ---
 
 ## Reconnect with saved token
+
+Works identically across all transports.
 
 ```java
 // Save after first connect
@@ -279,15 +352,15 @@ client.on(ClientEventType.WELCOME, e -> {
     prefs.putString("token", client.getSession().getToken());
 });
 
-// On next launch
+// On next launch — same host, any transport
 SocketBaseClient client = new SocketBaseClient.Builder()
     .host("localhost").port(9001).name("Alice")
     .reconnectToken(prefs.getString("token", null))
     .build();
 client.getSession().setRoomFactory(LotoRoomInfo::new);
 client.connect();
-// If token is still valid → RECONNECTED fires instead of WELCOME
-// If token expired → server falls through to fresh JOIN → WELCOME fires
+// Token valid   → RECONNECTED fires
+// Token expired → fresh JOIN → WELCOME fires
 ```
 
 ---
@@ -324,10 +397,9 @@ client.connect();
 
 | `permanent` | Meaning | `RoomInfo` action |
 |-------------|---------|-------------------|
-| `false` | Disconnected — ghost slot kept | `markOffline(playerId)` → player stays in list, `connected=false` |
+| `false` | Disconnected — ghost slot kept | `markOffline(playerId)` → player stays, `connected=false` |
 | `true` | Left for good (timeout / kick / ban / room switch) | `removePlayer(playerId)` → removed from list |
 
-Handle in your UI:
 ```java
 client.on(ClientEventType.PLAYER_LEFT, e -> {
     String  playerId  = e.getPayload().optString("playerId");
@@ -340,3 +412,16 @@ client.on(ClientEventType.PLAYER_LEFT, e -> {
     }
 });
 ```
+
+---
+
+## Transport framing reference
+
+| Transport | Wire format | SSL |
+|-----------|-------------|-----|
+| WS / WSS | WebSocket frames (text) | via `wss://` scheme |
+| TCP / TCP_SSL | Newline-delimited JSON (`\n` terminated) | `javax.net.ssl.SSLSocket` |
+| UDP / UDP_SSL | One JSON object per datagram | DTLS |
+
+> **TCP / UDP note** — the server must use the same framing convention.
+> TCP uses `\n` as the message delimiter; each datagram in UDP carries exactly one JSON message.
