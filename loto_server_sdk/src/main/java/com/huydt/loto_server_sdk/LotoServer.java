@@ -8,23 +8,12 @@ import com.huydt.socket_base.server.core.RoomManager;
 import com.huydt.socket_base.server.core.ServerConfig;
 import com.huydt.socket_base.server.core.SocketBaseServer;
 import com.huydt.socket_base.server.event.EventBus;
+import com.huydt.socket_base.server.event.EventType;
 import com.huydt.socket_base.server.network.MessageDispatcher;
 
-/**
- * Entry point for the Loto server.
- *
- * <pre>{@code
- * LotoServer server = new LotoServer(
- *     new ServerConfig.Builder()
- *         .wsPort(9001)
- *         .adminToken("my-secret")
- *         .reconnectTimeoutMs(30_000)
- *         .build()
- * );
- * new Thread(server::startSafe).start();
- * }</pre>
- */
 public class LotoServer extends SocketBaseServer {
+
+    private LotoDispatcher lotoDispatcher;
 
     public LotoServer(ServerConfig config) {
         super(config);
@@ -43,6 +32,18 @@ public class LotoServer extends SocketBaseServer {
     @Override
     protected MessageDispatcher createDispatcher(PlayerManager pm, RoomManager rm,
                                                   EventBus bus, String adminToken) {
-        return new LotoDispatcher(pm, rm, bus, adminToken);
+        lotoDispatcher = new LotoDispatcher(pm, rm, bus, adminToken);
+        return lotoDispatcher;
+    }
+
+    /**
+     * Called by startSafe() after all components are ready.
+     * Inject AdminService into dispatcher here so engines have access to it.
+     */
+    @Override
+    protected void onServerStarted() {
+        if (lotoDispatcher != null) {
+            lotoDispatcher.setAdminService(getAdmin());
+        }
     }
 }

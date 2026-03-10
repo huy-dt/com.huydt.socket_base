@@ -65,6 +65,8 @@ public class AdminService {
     /** Create a new room. */
     public Room createRoom(String name) { return roomManager.createRoom(name); }
 
+    public Room createRoom(String name, int maxPlayers) { return roomManager.createRoom(name, maxPlayers); }
+
     /** Create a room with explicit id and player cap. */
     public Room createRoom(String roomId, String name, int maxPlayers) {
         return roomManager.createRoom(roomId, name, maxPlayers);
@@ -159,7 +161,7 @@ public class AdminService {
     public Player           getPlayer(String playerId)  { return playerManager.getById(playerId); }
     public Collection<Player> getAllPlayers()            { return playerManager.getAllPlayers(); }
     public Room             getRoom(String roomId)       { return roomManager.getRoom(roomId); }
-    public Collection<Room> getAllRooms()                { return roomManager.listRooms(); }
+    public Collection<Room> getAllRooms()                { return roomManager.getAllRooms(); }
     public int              getPlayerCount()             { return playerManager.getTotalCount(); }
     public int              getRoomCount()               { return roomManager.getRoomCount(); }
 }

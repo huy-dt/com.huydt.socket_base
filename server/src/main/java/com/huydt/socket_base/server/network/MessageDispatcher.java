@@ -183,7 +183,7 @@ public class MessageDispatcher {
             }
         } else if (roomManager.getRoomCount() == 1) {
             // Auto-join the only room
-            room = roomManager.listRooms().iterator().next();
+            room = roomManager.getAllRooms().iterator().next();
             roomManager.joinRoom(player, room.getId(), null);
             room = roomManager.getRoom(room.getId());
         }
@@ -375,7 +375,7 @@ public class MessageDispatcher {
     }
 
     private void handleListRooms(IClientHandler handler) {
-        handler.send(OutboundMsg.roomList(roomManager.listRooms()).toJson());
+        handler.send(OutboundMsg.roomList(roomManager.getAllRooms()).toJson());
     }
 
     private void handleGetRoom(String connId, InboundMsg msg, IClientHandler handler) {
@@ -451,7 +451,7 @@ public class MessageDispatcher {
         } else {
             handler.send(OutboundMsg.appSnapshot(
                     playerManager.getAllPlayers(),
-                    roomManager.listRooms()).toJson());
+                    roomManager.getAllRooms()).toJson());
         }
     }
 
@@ -465,7 +465,7 @@ public class MessageDispatcher {
     protected void notifyLobby(String excludeConnId) {
         String appSnapshotJson = OutboundMsg.appSnapshot(
                 playerManager.getAllPlayers(),
-                roomManager.listRooms()).toJson();
+                roomManager.getAllRooms()).toJson();
 
         for (Player p : playerManager.getConnectedPlayers()) {
             if (p.getConnId() == null) continue;

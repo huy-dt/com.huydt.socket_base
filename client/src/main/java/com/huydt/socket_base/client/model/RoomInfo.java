@@ -144,6 +144,8 @@ public class RoomInfo {
     }
 
     public String getId(){ return id; }
+    public String getName(){ return name; }
+    public String getState(){ return state; }
 
     public PlayerInfo getPlayer(String id) {
         return players.get(id);

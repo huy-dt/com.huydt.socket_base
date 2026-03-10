@@ -37,6 +37,10 @@ public class RoomManager {
         return createRoom(UUID.randomUUID().toString().replace("-", "").substring(0, 8), name, 0);
     }
 
+    public synchronized Room createRoom(String name, int maxPlayers) {
+        return createRoom(UUID.randomUUID().toString().replace("-", "").substring(0, 8), name, maxPlayers);
+    }
+
     /** Creates a room with explicit id, name, and max players. */
     public synchronized Room createRoom(String roomId, String name, int maxPlayers) {
         if (config.maxRooms > 0 && rooms.size() >= config.maxRooms) {
@@ -177,7 +181,7 @@ public class RoomManager {
     // ── Accessors ─────────────────────────────────────────────────────
 
     public Room getRoom(String roomId)           { return rooms.get(roomId); }
-    public Collection<Room> listRooms()          { return Collections.unmodifiableCollection(rooms.values()); }
+    public Collection<Room> getAllRooms()          { return Collections.unmodifiableCollection(rooms.values()); }
     public int getRoomCount()                    { return rooms.size(); }
 
     public synchronized void shutdownAll() {

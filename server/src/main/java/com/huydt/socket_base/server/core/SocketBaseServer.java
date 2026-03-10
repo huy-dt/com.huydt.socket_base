@@ -170,6 +170,8 @@ public class SocketBaseServer {
         return new MessageDispatcher(pm, rm, bus, adminToken);
     }
 
+    protected void onServerStarted(){}
+
     // ── Lifecycle ─────────────────────────────────────────────────────
 
     /**
@@ -199,6 +201,7 @@ public class SocketBaseServer {
         // TCP accept loop
         tcpSocket = new ServerSocket(config.tcpPort);
         System.out.println("[SocketBaseServer] TCP listening on :" + config.tcpPort);
+        onServerStarted();
         bus.emit(ServerEvent.of(EventType.SERVER_STARTED,
                 "port=" + config.tcpPort + " ws=" + config.wsPort));
 

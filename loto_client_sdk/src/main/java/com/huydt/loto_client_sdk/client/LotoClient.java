@@ -1,5 +1,6 @@
 package com.huydt.loto_client_sdk.client;
 
+import com.huydt.loto_client_sdk.model.LotoPlayerInfo;
 import com.huydt.loto_client_sdk.model.LotoRoomInfo;
 import com.huydt.socket_base.client.core.SocketBaseClient;
 import com.huydt.socket_base.client.protocol.InboundMsg;
@@ -8,24 +9,13 @@ import org.json.JSONObject;
 /**
  * Loto-specific client.
  *
- * Routes incoming CUSTOM_MSG by tag to dedicated handler methods.
+ * Routes CUSTOM_MSG by tag to handler methods.
  * Automatically wires {@link LotoRoomInfo} as the room factory.
- *
- * <pre>{@code
- * LotoClient client = new LotoClient(
- *     new SocketBaseClient.Builder()
- *         .host("localhost")
- *         .port(9001)
- *         .name("Alice")
- * );
- * client.connect();
- * }</pre>
  */
 public class LotoClient extends SocketBaseClient {
 
     public LotoClient(Builder b) {
         super(b);
-        // Wire LotoRoomInfo factory so WELCOME/ROOM_SNAPSHOT use the right subclass
         getSession().setRoomFactory(LotoRoomInfo::new);
     }
 
@@ -37,44 +27,59 @@ public class LotoClient extends SocketBaseClient {
         JSONObject data = payload.optJSONObject("data");
 
         switch (tag) {
-            case "ROUND_START":    onRoundStart(data);    break;
-            case "NUMBER_DRAWN":   onNumberDrawn(data);   break;
-            case "ROUND_END":      onRoundEnd(data);      break;
-            case "GAME_OVER":      onGameOver(data);      break;
-            case "JACKPOT_UPDATE": onJackpotUpdate(data); break;
+            case "ROUND_START":          onRoundStart(data);         break;
+            case "NUMBER_DRAWN":         onNumberDrawn(data);        break;
+            case "ROUND_END":            onRoundEnd(data);           break;
+            case "ROUND_RESET":          onRoundReset(data);         break;
+            case "GAME_OVER":            onGameOver(data);           break;
+            case "JACKPOT_UPDATE":       onJackpotUpdate(data);      break;
+            case "AUTO_START_SCHEDULED": onAutoStartScheduled(data); break;
             default:
-                // Unknown tags fall through to generic CUSTOM_MSG event on the bus
                 super.dispatchCustom(msg, payload);
         }
     }
 
-    // ---------------------------------------------------------- game handlers
-    // Override these in your app to react to server events.
+    // ---------------------------------------------------- overridable handlers
 
-    /** Server started a new round. data: {@code round} (int) */
-    protected void onRoundStart(JSONObject data) {}
-
-    /** Server drew a number. data: {@code number} (int), {@code drawnNumbers} (array) */
-    protected void onNumberDrawn(JSONObject data) {}
-
-    /** A round ended. data: {@code round} (int) */
-    protected void onRoundEnd(JSONObject data) {}
-
-    /** Game over — someone won. data: {@code winnerId} (string), {@code jackpot} (long) */
-    protected void onGameOver(JSONObject data) {}
-
-    /** Jackpot amount changed. data: {@code jackpot} (long) */
-    protected void onJackpotUpdate(JSONObject data) {}
+    protected void onRoundStart(JSONObject data)         {}
+    protected void onNumberDrawn(JSONObject data)        {}
+    protected void onRoundEnd(JSONObject data)           {}
+    protected void onRoundReset(JSONObject data)         {}
+    protected void onGameOver(JSONObject data)           {}
+    protected void onJackpotUpdate(JSONObject data)      {}
+    protected void onAutoStartScheduled(JSONObject data) {}
 
     // ---------------------------------------------------------- game actions
 
-    /** Buy one page/ticket in the current room. */
+    /** Buy one page in the current room. */
     public boolean buyPage() {
         return custom("BUY_PAGE", null);
     }
 
-    /** Signal ready to start. */
-    public boolean ready() {
-        return custom("READY", null);
+    /** Manually start the game (must be in room). */
+    public boolean startGame() {
+        return custom("START_GAME", null);
+    }
+
+    /** Claim bingo / win. */
+    public boolean claimWin() {
+        return custom("CLAIM_WIN", null);
+    }
+
+    /** Reset room to WAITING (admin only). */
+    public boolean resetRoom() {
+        return custom("RESET_ROOM", null);
+    }
+
+    // --------------------------------------------------------- self info helpers
+
+    public LotoPlayerInfo getSelfInfo() {
+        if (getSession().getCurrentRoom() == null) return null;
+        return (LotoPlayerInfo) getSession().getCurrentRoom()
+                .getPlayer(getSession().getPlayerId());
+    }
+
+    public LotoRoomInfo getCurrentLotoRoom() {
+        return (LotoRoomInfo) getSession().getCurrentRoom();
     }
 }
