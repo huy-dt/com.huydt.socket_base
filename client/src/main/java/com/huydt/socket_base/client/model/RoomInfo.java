@@ -143,6 +143,8 @@ public class RoomInfo {
         return Collections.unmodifiableMap(players);
     }
 
+    public String getId(){ return id; }
+
     public PlayerInfo getPlayer(String id) {
         return players.get(id);
     }

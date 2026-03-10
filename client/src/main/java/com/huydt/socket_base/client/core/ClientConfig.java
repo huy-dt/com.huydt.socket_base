@@ -58,8 +58,8 @@ public final class ClientConfig {
 
     public final Protocol protocol;
     public final String   host;
-    public final int      port;        // -1 = use scheme default
-    public final String   path;        // WS path, e.g. "/ws" (may be null)
+    public final int      port;       // -1 = use scheme default
+    public final String   path;       // WS path, e.g. "/ws" (may be null)
 
     /** Timeout waiting for connection in ms. 0 = no timeout. */
     public final int connectTimeoutMs;
@@ -70,6 +70,7 @@ public final class ClientConfig {
     // ── Legacy compat fields (read-only aliases) ───────────────────────
 
     /** @deprecated Use {@link #protocol} */
+    @Deprecated
     public final boolean useSsl;
 
     private ClientConfig(Builder b) {

@@ -15,22 +15,21 @@ repositories {
 }
 
 dependencies {
-    // Depend on :server project
-    implementation project(':server')
+    // Depend on :client project
+    implementation project(':client')
 
     // JSON parsing
     implementation 'org.json:json:20231013'
 
-    // WebSocket client (cùng lib với server)
+    // WebSocket client
     implementation 'org.java-websocket:Java-WebSocket:1.5.4'
     implementation 'org.slf4j:slf4j-simple:2.0.12'
 }
 
 // ── Fat JAR — self-contained ───────────────────────────────────────────────
 jar {
-    dependsOn ':server:jar'
-
-    archiveBaseName    = 'loto_server_sdk'
+    dependsOn ':client:jar'
+    archiveBaseName    = 'loto_client_sdk'
     archiveVersion     = version
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
@@ -40,8 +39,8 @@ jar {
     }
     manifest {
         attributes(
-            'Main-Class'             : 'com.huydt.loto_server_sdk.Main',
-            'Implementation-Title'   : 'Socket Loto_Server',
+            'Main-Class'             : 'com.huydt.loto_client_sdk.Main',
+            'Implementation-Title'   : 'Socket Loto_Client',
             'Implementation-Version' :  version
         )
     }
