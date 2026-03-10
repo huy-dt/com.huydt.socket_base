@@ -1,5 +1,0 @@
-Manifest-Version: 1.0
-Main-Class: com.huydt.socket_base.Main
-Implementation-Title: socket_base
-Implementation-Version: 1.0.0
-

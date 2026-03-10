@@ -1,0 +1,5 @@
+// settings.gradle (root)
+rootProject.name = 'huydt-socket'
+
+include(':client')
+include(':server')

@@ -1,0 +1,53 @@
+===============================
+Refactor started: 03/09/2026 15:07:28
+com.huydt.socket_base -> com.huydt.socket_base.server
+Project: ../
+Module: socket_base
+===============================
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\admin\AdminService.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\core\PlayerManager.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\core\RoomManager.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\core\ServerConfig.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\core\SocketBaseServer.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\core\TransportMode.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\event\EventBus.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\event\EventType.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\event\ServerEvent.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\event\ServerEventListener.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\model\BaseModel.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\model\Player.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\model\Room.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\network\BaseWebSocketServer.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\network\IClientHandler.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\network\MessageDispatcher.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\network\TcpClientHandler.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\network\WsClientHandler.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\protocol\InboundMsg.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\protocol\MsgType.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\protocol\OutboundMsg.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\util\Broadcast.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\src\main\java\com\huydt\socket_base\Main.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_base\build.gradle
+UPDATED FILE: C:\Users\JVC  Store\Desktop\New folder\socket_base\socket_client_base\src\main\java\com\huydt\socket_client_base\protocol\MsgType.java
+===============================
+Refactor started: 03/09/2026 15:13:34
+com.huydt.socket_client_base -> com.huydt.socket_base.client
+Project: ../
+Module: client
+===============================
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\core\ClientConfig.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\core\ClientSession.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\core\SocketBaseClient.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\event\ClientEvent.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\event\ClientEventBus.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\event\ClientEventListener.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\event\ClientEventType.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\model\PlayerInfo.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\model\RoomInfo.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\protocol\InboundMsg.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\protocol\MsgType.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\protocol\OutboundMsg.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base\Main.java
+UPDATED FILE: C:\Users\JVC  Store\Desktop\socket_base\client\build.gradle
+MOVED: C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_client_base -> C:\Users\JVC  Store\Desktop\socket_base\client\src\main\java\com\huydt\socket_base\client
+Finished: 03/09/2026 15:13:35
