@@ -31,8 +31,8 @@ import java.util.Scanner;
  *   ── Player ──────────────────────────────────────────────
  *   info                              Session &amp; connection info
  *   players                           List players (lobby or room)
- *   join-room  &lt;roomId&gt; [password]    Join a room
- *   leave-room                        Leave current room
+ *   room-join  &lt;roomId&gt; [password]    Join a room
+ *   room-leave                        Leave current room
  *   custom     &lt;tag&gt; [message]        Send custom event
  *
  *   ── Admin ───────────────────────────────────────────────
@@ -271,13 +271,13 @@ public class Main {
                 break;
             }
 
-            case "join-room": {
-                if (parts.length < 2) { System.out.println("  Usage: join-room <roomId> [password]"); break; }
+            case "room-join": {
+                if (parts.length < 2) { System.out.println("  Usage: room-join <roomId> [password]"); break; }
                 client.joinRoom(parts[1], parts.length >= 3 ? parts[2] : null);
                 break;
             }
 
-            case "leave-room":
+            case "room-leave":
                 client.leaveRoom();
                 break;
 
@@ -442,8 +442,8 @@ public class Main {
         System.out.println("  ── Player ──────────────────────────────────────────────────────────");
         System.out.println("  info                               Session & connection info");
         System.out.println("  players                            List players (lobby or room)");
-        System.out.println("  join-room   <roomId> [password]    Join a room");
-        System.out.println("  leave-room                         Leave current room");
+        System.out.println("  room-join   <roomId> [password]    Join a room");
+        System.out.println("  room-leave                         Leave current room");
         System.out.println("  custom      <tag> [message]        Send custom event");
         System.out.println();
         System.out.println("  ── Admin ───────────────────────────────────────────────────────────");
