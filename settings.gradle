@@ -4,4 +4,4 @@ rootProject.name = 'huydt-socket'
 include(':client')
 include(':server')
 include(':server_sdk')
-include(':loto_client_sdk')
+include(':client_sdk')
