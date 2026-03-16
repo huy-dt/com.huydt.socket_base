@@ -23,41 +23,28 @@ import java.util.stream.Collectors;
  * {@link ServerConfig#reconnectTimeoutMs} the slot is restored transparently.
  * If the timer fires first, {@link #permanentRemove} is called on the
  * scheduler thread — the {@link #onPermanentRemove} hook fires so the
- * dispatcher (or any other subscriber) can react (e.g. broadcast APP_SNAPSHOT).
+ * dispatcher (or any other subscriber) can react.
  */
 public class PlayerManager {
 
     private final ServerConfig config;
     private final EventBus     bus;
 
-    /** playerId → Player */
     private final Map<String, Player>         playersById    = new ConcurrentHashMap<>();
-    /** connId → Player (live connections only) */
     private final Map<String, Player>         playersByConn  = new ConcurrentHashMap<>();
-    /** token → Player (includes ghosts waiting to reconnect) */
     private final Map<String, Player>         playersByToken = new ConcurrentHashMap<>();
-    /** connId → IClientHandler */
     private final Map<String, IClientHandler> handlers       = new ConcurrentHashMap<>();
-    /** playerId → pending removal ScheduledFuture */
     private final Map<String, ScheduledFuture<?>> pendingRemoval = new ConcurrentHashMap<>();
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1,
             r -> { Thread t = new Thread(r, "player-timeout"); t.setDaemon(true); return t; });
 
-    // Ban lists
     private final Set<String> bannedIds = Collections.synchronizedSet(new HashSet<>());
     private final Set<String> bannedIps = Collections.synchronizedSet(new HashSet<>());
 
     /**
      * Optional hook called (on the scheduler thread) when a ghost player is
      * permanently removed after the reconnect timeout expires.
-     *
-     * <p>Register from {@link com.huydt.socket_base.server.network.MessageDispatcher}
-     * so it can broadcast an APP_SNAPSHOT without needing a direct reference
-     * to the dispatcher:
-     * <pre>
-     * playerManager.onPermanentRemove = removedPlayer -> broadcastAppSnapshot(null);
-     * </pre>
      */
     public Consumer<Player> onPermanentRemove = null;
 
@@ -68,19 +55,12 @@ public class PlayerManager {
 
     // ── Connect / Reconnect ───────────────────────────────────────────
 
-    /**
-     * Factory method — override in a subclass to return your own Player subclass.
-     * <pre>
-     * &#64;Override protected Player createPlayer(String name) { return new LotoPlayer(name); }
-     * </pre>
-     */
+    /** Factory method — override to return a custom Player subclass. */
     protected Player createPlayer(String name) {
         return new Player(name);
     }
 
-    /**
-     * Fresh join: creates a new Player, registers the handler, fires PLAYER_JOINED.
-     */
+    /** Fresh join: creates a new Player, registers the handler, fires PLAYER_JOINED. */
     public synchronized Player join(String connId, String name, IClientHandler handler) {
         Player player = createPlayer(name);
         register(connId, player, handler);
@@ -91,7 +71,6 @@ public class PlayerManager {
     /**
      * Reconnect using a previously issued token.
      * Cancels the pending removal timer and restores the live connection.
-     * If the old connection is still alive, it is forcefully disconnected first.
      *
      * @return the Player on success, null if token not found / expired
      */
@@ -99,27 +78,8 @@ public class PlayerManager {
         Player player = playersByToken.get(token);
         if (player == null) return null;
 
-        // Cancel pending removal timer
-        ScheduledFuture<?> fut = pendingRemoval.remove(player.getId());
-        if (fut != null) fut.cancel(false);
-
-        // Forcefully close the old connection if it is still alive
-        String oldConnId = player.getConnId();
-        if (oldConnId != null && !oldConnId.equals(connId)) {
-            IClientHandler oldHandler = handlers.remove(oldConnId);
-            if (oldHandler != null) {
-                try {
-                    oldHandler.send(OutboundMsg.error("REPLACED",
-                            "Your session was taken over by a new connection").toJson());
-                    oldHandler.close();
-                } catch (Exception e) {
-                    System.err.println("[PlayerManager] Failed to close old connection: " + e.getMessage());
-                }
-            }
-            playersByConn.remove(oldConnId);
-            System.out.printf("[PlayerManager] Disconnected old connection '%s' for player '%s' (token reuse)%n",
-                    oldConnId, player.getName());
-        }
+        cancelPendingRemoval(player.getId());
+        closeStaleConnection(player, connId);
 
         player.markConnected(connId);
         handlers.put(connId, handler);
@@ -140,39 +100,30 @@ public class PlayerManager {
 
         handlers.remove(connId);
         player.markDisconnected();
-
         bus.emit(new ServerEvent.Builder(EventType.PLAYER_DISCONNECTED).player(player).build());
 
         if (config.reconnectTimeoutMs > 0) {
             ScheduledFuture<?> fut = scheduler.schedule(
                     () -> permanentRemove(player.getId()),
-                    config.reconnectTimeoutMs,
-                    TimeUnit.MILLISECONDS);
+                    config.reconnectTimeoutMs, TimeUnit.MILLISECONDS);
             pendingRemoval.put(player.getId(), fut);
             System.out.printf("[PlayerManager] Ghost '%s' — timeout in %dms%n",
                     player.getName(), config.reconnectTimeoutMs);
         } else {
-            permanentRemove(player.getId());  // immediate
+            permanentRemove(player.getId());
         }
     }
 
-    /**
-     * Final removal after timeout or immediate disconnect (timeout=0).
-     * Fires {@link EventType#PLAYER_LEFT} and calls {@link #onPermanentRemove}.
-     */
     private synchronized void permanentRemove(String playerId) {
         Player player = playersById.remove(playerId);
-        if (player == null) return;  // already reconnected and re-registered
+        if (player == null) return;  // already reconnected
 
         playersByToken.remove(player.getToken());
         pendingRemoval.remove(playerId);
-
-        System.out.printf("[PlayerManager] Permanently removed '%s' (timeout expired)%n",
-                player.getName());
+        System.out.printf("[PlayerManager] Permanently removed '%s'%n", player.getName());
 
         bus.emit(new ServerEvent.Builder(EventType.PLAYER_LEFT).player(player).build());
 
-        // Notify dispatcher (or any other subscriber) so it can broadcast APP_SNAPSHOT
         Consumer<Player> hook = onPermanentRemove;
         if (hook != null) {
             try { hook.accept(player); }
@@ -187,12 +138,7 @@ public class PlayerManager {
     public synchronized void kick(String playerId, String reason) {
         Player player = playersById.get(playerId);
         if (player == null) return;
-
-        IClientHandler h = handlers.get(player.getConnId());
-        if (h != null) {
-            h.send(OutboundMsg.kicked(reason).toJson());
-            h.close();
-        }
+        sendAndClose(player, OutboundMsg.kicked(reason).toJson());
         permanentRemove(playerId);
         bus.emit(new ServerEvent.Builder(EventType.PLAYER_KICKED)
                 .player(player).message(reason).build());
@@ -201,17 +147,11 @@ public class PlayerManager {
     public synchronized void ban(String playerId, String reason) {
         Player player = playersById.get(playerId);
         if (player != null) {
-            bannedIds.add(playerId);
-            IClientHandler h = handlers.get(player.getConnId());
-            if (h != null) {
-                h.send(OutboundMsg.banned(reason).toJson());
-                bannedIps.add(h.getRemoteIp());
-                h.close();
-            }
+            bannedIps.add(getHandlerIp(player));
+            sendAndClose(player, OutboundMsg.banned(reason).toJson());
             permanentRemove(playerId);
-        } else {
-            bannedIds.add(playerId);
         }
+        bannedIds.add(playerId);
         bus.emit(new ServerEvent.Builder(EventType.PLAYER_BANNED)
                 .message(playerId + ": " + reason).build());
     }
@@ -247,9 +187,7 @@ public class PlayerManager {
 
     public void broadcast(String json, String excludeConnId) {
         for (Map.Entry<String, IClientHandler> e : handlers.entrySet()) {
-            if (!e.getKey().equals(excludeConnId)) {
-                e.getValue().send(json);
-            }
+            if (!e.getKey().equals(excludeConnId)) e.getValue().send(json);
         }
     }
 
@@ -278,6 +216,44 @@ public class PlayerManager {
         playersByConn.put(connId, player);
         handlers.put(connId, handler);
         player.setConnId(connId);
+    }
+
+    private void cancelPendingRemoval(String playerId) {
+        ScheduledFuture<?> fut = pendingRemoval.remove(playerId);
+        if (fut != null) fut.cancel(false);
+    }
+
+    /** Close the player's old connection if it differs from the new connId. */
+    private void closeStaleConnection(Player player, String newConnId) {
+        String oldConnId = player.getConnId();
+        if (oldConnId == null || oldConnId.equals(newConnId)) return;
+        IClientHandler oldHandler = handlers.remove(oldConnId);
+        if (oldHandler != null) {
+            try {
+                oldHandler.send(OutboundMsg.error("REPLACED",
+                        "Your session was taken over by a new connection").toJson());
+                oldHandler.close();
+            } catch (Exception e) {
+                System.err.println("[PlayerManager] Failed to close old connection: " + e.getMessage());
+            }
+        }
+        playersByConn.remove(oldConnId);
+        System.out.printf("[PlayerManager] Disconnected old connection '%s' for player '%s'%n",
+                oldConnId, player.getName());
+    }
+
+    /** Send a message to the player and close their connection. */
+    private void sendAndClose(Player player, String json) {
+        IClientHandler h = handlers.get(player.getConnId());
+        if (h != null) {
+            h.send(json);
+            h.close();
+        }
+    }
+
+    private String getHandlerIp(Player player) {
+        IClientHandler h = handlers.get(player.getConnId());
+        return h != null ? h.getRemoteIp() : null;
     }
 
     public void shutdown() { scheduler.shutdownNow(); }

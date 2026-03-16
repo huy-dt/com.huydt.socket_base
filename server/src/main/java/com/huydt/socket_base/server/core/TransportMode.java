@@ -6,11 +6,14 @@ package com.huydt.socket_base.server.core;
  * <ul>
  *   <li>{@code TCP}  — raw TCP socket only  (--tcp)</li>
  *   <li>{@code WS}   — WebSocket only       (--ws)</li>
- *   <li>{@code BOTH} — TCP + WebSocket      (--both, default)</li>
+ *   <li>{@code BOTH} — TCP + WebSocket      (--both)</li>
  * </ul>
  */
 public enum TransportMode {
     TCP, WS, BOTH;
+
+    public boolean usesTcp() { return this == TCP || this == BOTH; }
+    public boolean usesWs()  { return this == WS  || this == BOTH; }
 
     /** Parse from CLI args: "--tcp", "--ws", "--both". */
     public static TransportMode fromArg(String arg) {

@@ -30,7 +30,7 @@ dependencies {
 jar {
     dependsOn ':server:jar'
 
-    archiveBaseName    = 'loto_server_sdk'
+    archiveBaseName    = 'server_sdk'
     archiveVersion     = version
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
@@ -40,7 +40,7 @@ jar {
     }
     manifest {
         attributes(
-            'Main-Class'             : 'com.huydt.loto_server_sdk.Main',
+            'Main-Class'             : 'com.huydt.loto_online.server_sdk.LotoMain',
             'Implementation-Title'   : 'Socket Loto_Server',
             'Implementation-Version' :  version
         )

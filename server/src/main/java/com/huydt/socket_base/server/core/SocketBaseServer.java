@@ -126,8 +126,7 @@ public class SocketBaseServer {
         }
 
         // WS server
-        if (config.wsPort > 0 &&
-            (config.transport == TransportMode.WS || config.transport == TransportMode.BOTH)) {
+        if (config.transport.usesWs() && config.wsPort > 0) {
             this.wsServer = new BaseWebSocketServer(config.wsPort, this.dispatcher);
         }
     }
@@ -190,7 +189,7 @@ public class SocketBaseServer {
         }
 
         // WS-only mode: skip TCP accept loop but keep thread alive
-        if (config.transport == TransportMode.WS) {
+        if (!config.transport.usesTcp()) {
             System.out.println("[SocketBaseServer] WS-only mode — TCP accept loop disabled");
             while (running.get()) {
                 try { Thread.sleep(1000); } catch (InterruptedException e) { break; }
